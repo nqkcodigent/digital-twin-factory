@@ -50,9 +50,16 @@ app.use('/api/alerts', createAlertRoutes(services.alertService));
 app.use('/api/maintenance-tickets', createMaintenanceRoutes(services.maintenanceService));
 app.use('/api/dashboard', createDashboardRoutes(services.dashboardService));
 
-// Health check
+// Track database connection status (no repeated $connect calls)
+let dbConnected = false;
+
+// Health check — responds immediately even if DB is still connecting
 app.get('/api/health', (_req, res) => {
-  res.json({ status: 'ok', timestamp: new Date().toISOString() });
+  if (dbConnected) {
+    res.json({ status: 'ok', database: 'connected', timestamp: new Date().toISOString() });
+  } else {
+    res.status(503).json({ status: 'degraded', database: 'connecting', timestamp: new Date().toISOString() });
+  }
 });
 
 // Socket.IO connection handler
@@ -68,37 +75,62 @@ io.on('connection', (socket) => {
   });
 });
 
-// Start server
+// Start server — listen first, then connect DB asynchronously
 const PORT = parseInt(process.env.PORT || '4000', 10);
 
-async function start() {
-  try {
-    await prisma.$connect();
-    console.log('✅ Connected to MariaDB');
+async function connectDatabase() {
+  const MAX_RETRIES = 5;
+  const RETRY_DELAY = 3000;
 
+  for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+    try {
+      await prisma.$connect();
+      console.log('✅ Connected to MariaDB');
+      dbConnected = true;
+      return true;
+    } catch (error) {
+      console.error(`❌ DB connection attempt ${attempt}/${MAX_RETRIES} failed:`, error instanceof Error ? error.message : error);
+      if (attempt < MAX_RETRIES) {
+        console.log(`⏳ Retrying in ${RETRY_DELAY / 1000}s...`);
+        await new Promise(r => setTimeout(r, RETRY_DELAY));
+      }
+    }
+  }
+
+  console.error('❌ All database connection attempts failed. Server running in degraded mode.');
+  return false;
+}
+
+async function startSimulation() {
+  try {
     await simulationService.initialize();
     simulationService.start();
-
-    server.listen(PORT, '0.0.0.0', () => {
-      console.log(`🚀 Server running on http://localhost:${PORT}`);
-      console.log(`📡 WebSocket ready for connections`);
-      console.log(`\n📋 API Endpoints:`);
-      console.log(`   GET  /api/machines`);
-      console.log(`   GET  /api/machines/:id`);
-      console.log(`   GET  /api/alerts`);
-      console.log(`   GET  /api/dashboard`);
-      console.log(`   GET  /api/maintenance-tickets`);
-      console.log(`   POST /api/maintenance-tickets`);
-      console.log(`   PATCH /api/maintenance-tickets/:id`);
-      console.log(`   GET  /api/health`);
-    });
+    console.log('📡 Simulation engine started');
   } catch (error) {
-    console.error('❌ Failed to start server:', error);
-    process.exit(1);
+    console.error('⚠️ Simulation engine failed to start:', error);
   }
 }
 
-start();
+server.listen(PORT, '0.0.0.0', () => {
+  console.log(`🚀 Server running on http://localhost:${PORT}`);
+  console.log(`📡 WebSocket ready for connections`);
+  console.log(`\n📋 API Endpoints:`);
+  console.log(`   GET  /api/machines`);
+  console.log(`   GET  /api/machines/:id`);
+  console.log(`   GET  /api/alerts`);
+  console.log(`   GET  /api/dashboard`);
+  console.log(`   GET  /api/maintenance-tickets`);
+  console.log(`   POST /api/maintenance-tickets`);
+  console.log(`   PATCH /api/maintenance-tickets/:id`);
+  console.log(`   GET  /api/health`);
+
+  // Connect DB and start simulation after server is listening
+  connectDatabase().then(connected => {
+    if (connected) {
+      startSimulation();
+    }
+  });
+});
 
 // Graceful shutdown
 process.on('SIGTERM', async () => {
