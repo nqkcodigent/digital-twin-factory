@@ -53,13 +53,14 @@ app.use('/api/dashboard', createDashboardRoutes(services.dashboardService));
 // Track database connection status (no repeated $connect calls)
 let dbConnected = false;
 
-// Health check — responds immediately even if DB is still connecting
+// Health check — always returns 200 so Railway keeps the container alive
+// DB status is reported in the response body, not the HTTP status code
 app.get('/api/health', (_req, res) => {
-  if (dbConnected) {
-    res.json({ status: 'ok', database: 'connected', timestamp: new Date().toISOString() });
-  } else {
-    res.status(503).json({ status: 'degraded', database: 'connecting', timestamp: new Date().toISOString() });
-  }
+  res.json({
+    status: dbConnected ? 'ok' : 'degraded',
+    database: dbConnected ? 'connected' : 'connecting',
+    timestamp: new Date().toISOString()
+  });
 });
 
 // Socket.IO connection handler
