@@ -1,0 +1,121 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String   @id @default(uuid())
+  email     String   @unique
+  name      String
+  role      String   @default("operator")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  maintenanceTickets MaintenanceTicket[]
+}
+
+model Factory {
+  id        String    @id @default(uuid())
+  name      String
+  location  String?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  workshops Workshop[]
+}
+
+model Workshop {
+  id        String    @id @default(uuid())
+  name      String
+  factoryId String
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  factory  Factory   @relation(fields: [factoryId], references: [id])
+  machines Machine[]
+}
+
+model Machine {
+  id                   String               @id @default(uuid())
+  name                 String
+  type                 String
+  status               String               @default("running")
+  temperature          Float                @default(50)
+  vibration            Float                @default(2.5)
+  powerConsumption     Float                @default(200)
+  productionOutput     Int                  @default(0)
+  lastMaintenanceDate  DateTime?
+  positionX            Float                @default(0)
+  positionY            Float                @default(0)
+  positionZ            Float                @default(0)
+  workshopId           String
+  createdAt            DateTime             @default(now())
+  updatedAt            DateTime             @updatedAt
+
+  workshop             Workshop             @relation(fields: [workshopId], references: [id])
+  metrics              MachineMetric[]
+  alerts               Alert[]
+  maintenanceTickets   MaintenanceTicket[]
+  maintenanceLogs      MaintenanceLog[]
+}
+
+model MachineMetric {
+  id               String   @id @default(uuid())
+  machineId        String
+  temperature      Float
+  vibration        Float
+  powerConsumption Float
+  productionOutput Int
+  recordedAt       DateTime @default(now())
+
+  machine Machine @relation(fields: [machineId], references: [id])
+
+  @@index([machineId, recordedAt])
+}
+
+model Alert {
+  id         String   @id @default(uuid())
+  machineId  String
+  severity   String   @default("warning")
+  message    String
+  resolved   Boolean  @default(false)
+  createdAt  DateTime @default(now())
+
+  machine Machine @relation(fields: [machineId], references: [id])
+
+  @@index([createdAt])
+}
+
+model MaintenanceTicket {
+  id          String   @id @default(uuid())
+  machineId   String
+  assignedTo  String?
+  issue       String
+  priority    String   @default("medium")
+  status      String   @default("open")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  machine     Machine  @relation(fields: [machineId], references: [id])
+  assignedUser User?   @relation(fields: [assignedTo], references: [id])
+  logs        MaintenanceLog[]
+
+  @@index([status])
+}
+
+model MaintenanceLog {
+  id              String   @id @default(uuid())
+  maintenanceTicketId String
+  machineId       String
+  description     String
+  action          String
+  performedBy     String?
+  createdAt       DateTime @default(now())
+
+  ticket  MaintenanceTicket @relation(fields: [maintenanceTicketId], references: [id])
+  machine Machine           @relation(fields: [machineId], references: [id])
+}
