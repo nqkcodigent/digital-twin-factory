@@ -2,6 +2,10 @@
   "name": "digital-twin-factory-backend",
   "version": "1.0.0",
   "description": "Digital Twin Factory Platform - Backend",
+  "engines": {
+    "node": ">=18.0.0",
+    "npm": ">=9.0.0"
+  },
   "main": "dist/index.js",
   "scripts": {
     "dev": "tsx watch src/index.ts",
