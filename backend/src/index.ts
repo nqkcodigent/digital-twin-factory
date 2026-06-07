@@ -63,6 +63,29 @@ app.get('/api/health', (_req, res) => {
   });
 });
 
+// Data inspection endpoint — returns all seeded data for verification
+app.get('/api/data', async (_req, res) => {
+  try {
+    const [users, factories, machines, alerts, tickets] = await Promise.all([
+      prisma.user.findMany(),
+      prisma.factory.findMany(),
+      prisma.machine.findMany(),
+      prisma.alert.findMany(),
+      prisma.maintenanceTicket.findMany(),
+    ]);
+
+    res.json({
+      users: { count: users.length, data: users },
+      factories: { count: factories.length, data: factories },
+      machines: { count: machines.length, data: machines },
+      alerts: { count: alerts.length, data: alerts },
+      tickets: { count: tickets.length, data: tickets },
+    });
+  } catch (error) {
+    res.status(500).json({ error: (error as Error).message });
+  }
+});
+
 // Socket.IO connection handler
 io.on('connection', (socket) => {
   console.log(`🔌 Client connected: ${socket.id}`);
@@ -124,6 +147,7 @@ server.listen(PORT, '0.0.0.0', () => {
   console.log(`   POST /api/maintenance-tickets`);
   console.log(`   PATCH /api/maintenance-tickets/:id`);
   console.log(`   GET  /api/health`);
+  console.log(`   GET  /api/data`);
 
   // Connect DB and start simulation after server is listening
   connectDatabase().then(connected => {
